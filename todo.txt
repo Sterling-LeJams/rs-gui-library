@@ -1,0 +1,1 @@
+I neeed to move the render function to Window and then have then encoder in the vertex shader struct. 

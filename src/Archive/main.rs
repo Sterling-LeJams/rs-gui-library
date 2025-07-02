@@ -4,9 +4,6 @@ use crate::shaders::buffers;
 use wgpu::util::DeviceExt;
 use crate::shaders::buffers::Vertex;
 use crate::shaders::buffers::VERTICES;
-use wgpu::Instance;
-use wgpu::SurfaceConfiguration;
-use wgpu::TextureFormat;
 
 use winit::{
     application::ApplicationHandler,
@@ -16,6 +13,18 @@ use winit::{
     window::Window,
 };
 
+pub struct State {
+    surface: wgpu::Surface<'static>,
+    device: wgpu::Device,
+    queue: wgpu::Queue,
+    config: wgpu::SurfaceConfiguration,
+    is_surface_configured: bool,
+    render_pipeline: wgpu::RenderPipeline,
+    window: Arc<Window>,
+    vertex_buffer: wgpu::Buffer,
+    num_vertices: u32,
+}
+
 // Here is my understanding of the code:
 // The `State` struct holds the necessary components for rendering with wgpu
 // - Start by creating an Instance which will target the GPU in this case Metal
@@ -24,19 +33,13 @@ use winit::{
 //   used to createe a connection to the Device
 // - request Device which is the actual GPU and Queue which is used to send commands to the GPU
 // - config the Surface
-pub struct WindowState {
-    surface: wgpu::Surface<'static>,
-    config: wgpu::SurfaceConfiguration,
-    is_surface_configured: bool,
-    window: Arc<Window>,
-    gpu: GPUDevice,
-    vertex_shaders: VertexShaders,
 
-}
-
-impl WindowState {
-    pub async fn new(window: Arc<Window>) -> Result<Self> {
-        // The instance creates the backend for the GPU. Backends::PRIMARY; this includes Metal 
+impl State {
+    pub async fn new(window: Arc<Window>) -> Result<State> {
+        let size = window.inner_size();
+        
+        // The instance is a handle to our GPU
+        // BackendBit::PRIMARY => Vulkan + Metal + DX12 + Browser WebGPU
         let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
             #[cfg(not(target_arch = "wasm32"))]
             backends: wgpu::Backends::PRIMARY,
@@ -45,77 +48,28 @@ impl WindowState {
 
         let surface = instance.create_surface(window.clone()).unwrap();
 
-        let gpu = GPUDevice::new(&surface, instance).await?;
+        let adapter = instance
+            .request_adapter(&wgpu::RequestAdapterOptions {
+                power_preference: wgpu::PowerPreference::default(),
+                compatible_surface: Some(&surface),
+                force_fallback_adapter: false,
+            })
+            .await?;
 
-        let config = configure_surface(&gpu.adapter, &window, &surface);
+        let (device, queue) = adapter
+            .request_device(&wgpu::DeviceDescriptor {
+                label: None,
+                required_features: wgpu::Features::empty(),
+                required_limits: if cfg!(target_arch = "wasm32") {
+                    wgpu::Limits::downlevel_webgl2_defaults()
+                } else {
+                    wgpu::Limits::default()
+                },
+                memory_hints: Default::default(),
+                trace: wgpu::Trace::Off,
+            })
+            .await?;
 
-        let vertex_shaders = VertexShaders::new(&gpu.device, config.clone())?;
-
-        Ok(Self {
-            surface,
-            config: config.clone(),
-            is_surface_configured: false,
-            window,
-            gpu,
-            vertex_shaders,
-        })
-    }
-
-    pub fn render(&self) -> Result<(), wgpu::SurfaceError> {
-        self.window.request_redraw();
-
-        if !self.is_surface_configured {
-            return Ok(());
-        }
-        
-        let output = self.surface.get_current_texture()?;
-        let view = output.texture.create_view(&wgpu::TextureViewDescriptor::default());
-
-        // We also need to create a CommandEncoder to create the actual commands to send to the GPU. Most modern graphics frameworks expect commands to be stored in a command buffer before being sent to the GPU. 
-        // The encoder builds a command buffer that we can then send to the GPU.
-        // Command buffers are objects used to record commands which can be subsequently submitted to a device queue for execution. Hold GPU actions to send to the Device like Clear the screen, draw triangles, copy a texture etc.
-    
-        let mut encoder = self.gpu.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-        label: Some("Render Encoder"),});
-
-        // Now we can get to clearing the screen a long time coming. We need to use the encoder to create a RenderPass. The RenderPass has all the methods for the actual drawing. 
-            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("Render Pass"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &view,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color {
-                            r: 0.1,
-                            g: 0.2,
-                            b: 1.0,
-                            a: 1.0,
-                        }),
-                        store: wgpu::StoreOp::Store,
-                    },
-                })],
-                depth_stencil_attachment: None,
-                occlusion_query_set: None,
-                timestamp_writes: None,
-            });
-
-            render_pass.set_pipeline(&self.vertex_shaders.render_pipeline); // 2.
-            render_pass.set_vertex_buffer(0, self.vertex_shaders.vertex_buffer.slice(..));
-            render_pass.draw(0..self.vertex_shaders.num_vertices, 0..1); // 3.
-
-        drop(render_pass);
-
-    // submit will accept anything that implements IntoIter
-    self.gpu.queue.submit(std::iter::once(encoder.finish()));
-    output.present();
-
-    Ok(())
-    }
-
-}
-
-    pub fn configure_surface(adapter: &wgpu::Adapter, window: &Window, surface: &wgpu::Surface<'_>) -> SurfaceConfiguration {
-        let size = window.inner_size();
         let surface_caps = surface.get_capabilities(&adapter);
         
         let surface_format = surface_caps.formats.iter()
@@ -132,64 +86,10 @@ impl WindowState {
             alpha_mode: surface_caps.alpha_modes[0],
             view_formats: vec![],
             desired_maximum_frame_latency: 2,
+
         };
-        config   
-    }
 
-pub struct GPUDevice {
-    instance: wgpu::Instance,
-    device: wgpu::Device,
-    queue: wgpu::Queue,
-    adapter: wgpu::Adapter,
-}
-
-impl GPUDevice {
-    pub async fn new<'window>(surface: &wgpu::Surface<'window>, instance: Instance) -> Result<Self> {
-        
-        // Adapters can be used to open a connection to the corresponding Device
-        let adapter = instance
-            .request_adapter(&wgpu::RequestAdapterOptions {
-                power_preference: wgpu::PowerPreference::default(),
-                compatible_surface: Some(&surface),
-                force_fallback_adapter: false,
-            })
-            .await?;
-
-        // Open connection to a graphics and/or compute device.
-        // Responsible for the creation of most rendering and compute resources.
-        // These are then used in commands, which are submitted to a [`Queue`].    
-        let (device, queue) = adapter
-            .request_device(&wgpu::DeviceDescriptor {
-                label: None,
-                required_features: wgpu::Features::empty(),
-                required_limits: if cfg!(target_arch = "wasm32") {
-                    wgpu::Limits::downlevel_webgl2_defaults()
-                } else {
-                    wgpu::Limits::default()
-                },
-                memory_hints: Default::default(),
-                trace: wgpu::Trace::Off,
-            })
-            .await?;
-
-            Ok(Self {
-                instance,
-                device,
-                queue,
-                adapter,
-            })
-    }
-}
-
-pub struct VertexShaders {
-    vertex_buffer: wgpu::Buffer,
-    num_vertices: u32,
-    render_pipeline: wgpu::RenderPipeline,
-}
-
-impl VertexShaders {
-    pub fn new(device: &wgpu::Device, config: wgpu::SurfaceConfiguration) -> Result<Self> {
-         // config shader
+        // config shader
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
         label: Some("Shader"),
         source: wgpu::ShaderSource::Wgsl(include_str!("../shaders/shader.wgsl").into()),
@@ -244,6 +144,7 @@ impl VertexShaders {
             cache: None, // 6.
             });
 
+
         let vertex_buffer = device.create_buffer_init(
             &wgpu::util::BufferInitDescriptor {
             label: Some("Vertex Buffer"),
@@ -253,17 +154,97 @@ impl VertexShaders {
         );
 
         let num_vertices = VERTICES.len() as u32;
+
         Ok(Self {
+            surface,
+            device,
+            queue,
+            config,
+            is_surface_configured: false,
+            render_pipeline,
+            window,
             vertex_buffer,
             num_vertices,
-            render_pipeline,
+            
         })
+
+    }
+
+    pub fn resize(&mut self, width: u32, height: u32) {
+        // If we want to support resizing in our application, we're going to need to reconfigure 
+        // the surface every time the window's size changes. 
+        if width > 0 && height > 0 {
+            self.config.width = width;
+            self.config.height = height;
+            self.surface.configure(&self.device, &self.config);
+            self.is_surface_configured = true;
+        } else {
+            eprintln!("Surface is not configured yet, cannot resize.");
+        }
+    }
+    
+    pub fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
+        self.window.request_redraw();
+
+        if !self.is_surface_configured {
+            return Ok(());
+        }
+        
+        let output = self.surface.get_current_texture()?;
+        let view = output.texture.create_view(&wgpu::TextureViewDescriptor::default());
+
+        // We also need to create a CommandEncoder to create the actual commands to send to the GPU. Most modern graphics frameworks expect commands to be stored in a command buffer before being sent to the GPU. 
+        // The encoder builds a command buffer that we can then send to the GPU.
+        // Command buffers are objects used to record commands which can be subsequently submitted to a device queue for execution. Hold GPU actions to send to the Device like Clear the screen, draw triangles, copy a texture etc.
+    
+        let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+        label: Some("Render Encoder"),});
+
+        // Now we can get to clearing the screen a long time coming. We need to use the encoder to create a RenderPass. The RenderPass has all the methods for the actual drawing. 
+            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("Render Pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &view,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color {
+                            r: 0.1,
+                            g: 0.2,
+                            b: 1.0,
+                            a: 1.0,
+                        }),
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                occlusion_query_set: None,
+                timestamp_writes: None,
+            });
+
+            render_pass.set_pipeline(&self.render_pipeline); // 2.
+            render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
+            render_pass.draw(0..self.num_vertices, 0..1); // 3.
+
+        drop(render_pass);
+
+    // submit will accept anything that implements IntoIter
+    self.queue.submit(std::iter::once(encoder.finish()));
+    output.present();
+
+    Ok(())
+}
+
+    fn handle_key(&self, event_loop: &ActiveEventLoop, code: KeyCode, is_pressed: bool) {
+    match (code, is_pressed) {
+        (KeyCode::Escape, true) => event_loop.exit(),
+        _ => {}
+        
     }
 }
 
-
+}
 pub struct App {
-    state: Option<WindowState>,
+    state: Option<State>,
 }
 
 impl App {
@@ -275,7 +256,7 @@ impl App {
     }
 }
 
-impl ApplicationHandler<WindowState> for App {
+impl ApplicationHandler<State> for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         #[allow(unused_mut)]
         let mut window_attributes = Window::default_attributes();
@@ -283,12 +264,12 @@ impl ApplicationHandler<WindowState> for App {
         let window = Arc::new(event_loop.create_window(window_attributes).unwrap());
 
         {
-            self.state = Some(pollster::block_on(WindowState::new(window)).unwrap());
+            self.state = Some(pollster::block_on(State::new(window)).unwrap());
         }
     }
 
     #[allow(unused_mut)]
-    fn user_event(&mut self, _event_loop: &ActiveEventLoop, mut event: WindowState) {
+    fn user_event(&mut self, _event_loop: &ActiveEventLoop, mut event: State) {
         {
             event.window.request_redraw();
             event.resize(
@@ -368,6 +349,54 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     
     Ok(())
 }
+
+//==================================================================================//
+
+
+// this is a vertex buffer so the shader is not hard coded and will not have to recompile everytime you want to change it.
+
+#[repr(C)]
+#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct Vertex {
+    position: [f32; 3],
+    color: [f32; 3],
+    
+}
+
+// you are creating a struct that has the position and color of the vertex. But the GPU has no idea what that means.
+//  so you have to create a vertex buffer description so it knows what those bytes means otherwise it just sees this:
+// |    12 bytes    |     12 bytes     |
+// | [f32; 3] pos   | [f32; 3] color   |
+
+
+impl Vertex {
+    pub fn desc() -> wgpu::VertexBufferLayout<'static> {
+        wgpu::VertexBufferLayout {
+            array_stride: std::mem::size_of::<Vertex>() as wgpu::BufferAddress,
+            step_mode: wgpu::VertexStepMode::Vertex,
+            attributes: &[
+                wgpu::VertexAttribute {
+                    offset: 0,
+                    shader_location: 0,
+                    format: wgpu::VertexFormat::Float32x3,
+                },                        
+                wgpu::VertexAttribute {
+                    offset: std::mem::size_of::<[f32; 3]>() as wgpu::BufferAddress,
+                    shader_location: 1,
+                    format: wgpu::VertexFormat::Float32x3,
+                }
+            ]
+        }
+    }
+}
+
+pub const VERTICES: &[Vertex] = &[
+    Vertex { position: [0.0, 0.5, 0.0], color: [1.0, 0.0, 0.0] },
+    Vertex { position: [-0.5, -0.5, 0.0], color: [0.0, 1.0, 0.0] },
+    Vertex { position: [0.5, -0.5, 0.0], color: [0.0, 0.0, 1.0] },
+];
+
+
 
 
 
