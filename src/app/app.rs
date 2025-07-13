@@ -1,12 +1,12 @@
 use crate::window::window::WindowState;
+use std::sync::Arc;
 use winit::{
     application::ApplicationHandler,
     event::*,
     event_loop::{ActiveEventLoop, EventLoop},
-    keyboard::{KeyCode, PhysicalKey},
+    keyboard::PhysicalKey,
     window::Window,
 };
-use std::sync::Arc;
 
 pub struct App {
     state: Option<WindowState>,
@@ -14,10 +14,7 @@ pub struct App {
 
 impl App {
     pub fn new() -> Self {
-        Self {
-            state: None,
-           
-        }
+        Self { state: None }
     }
 }
 
@@ -43,8 +40,13 @@ impl ApplicationHandler<WindowState> for App {
         }
         self.state = Some(event);
     }
-    
-    fn window_event(&mut self, event_loop: &ActiveEventLoop, _window_id: winit::window::WindowId, event: WindowEvent,) {
+
+    fn window_event(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+        _window_id: winit::window::WindowId,
+        event: WindowEvent,
+    ) {
         let state = match &mut self.state {
             Some(canvas) => canvas,
             None => return,
@@ -78,16 +80,15 @@ impl ApplicationHandler<WindowState> for App {
             _ => {}
         }
     }
-
 }
 
 pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     env_logger::init();
 
     let event_loop = EventLoop::with_user_event().build()?;
-    let mut app = App::new(); 
-    
-    event_loop.run_app(&mut app)?; 
-    
+    let mut app = App::new();
+
+    event_loop.run_app(&mut app)?;
+
     Ok(())
 }

@@ -1,5 +1,5 @@
-use wgpu::Instance;
 use anyhow::Result;
+use wgpu::Instance;
 use wgpu::TextureDescriptor;
 
 pub struct GPUDevice {
@@ -10,8 +10,10 @@ pub struct GPUDevice {
 }
 
 impl GPUDevice {
-    pub async fn new<'window>(surface: &wgpu::Surface<'window>, instance: Instance) -> Result<Self> {
-        
+    pub async fn new<'window>(
+        surface: &wgpu::Surface<'window>,
+        instance: Instance,
+    ) -> Result<Self> {
         // Adapters can be used to open a connection to the corresponding Device
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
@@ -23,7 +25,7 @@ impl GPUDevice {
 
         // Open connection to a graphics and/or compute device.
         // Responsible for the creation of most rendering and compute resources.
-        // These are then used in commands, which are submitted to a [`Queue`].    
+        // These are then used in commands, which are submitted to a [`Queue`].
         let (device, queue) = adapter
             .request_device(&wgpu::DeviceDescriptor {
                 label: None,
@@ -38,33 +40,15 @@ impl GPUDevice {
             })
             .await?;
 
-            Ok(Self {
-                instance,
-                device,
-                queue,
-                adapter,
-            })
+        Ok(Self {
+            instance,
+            device,
+            queue,
+            adapter,
+        })
     }
 
-    pub fn create_depth_stencil_texture_and_view(&self, config: &wgpu::SurfaceConfiguration) -> wgpu::TextureView { 
-        let depth_texture = self.device.create_texture(&TextureDescriptor {
-            size: wgpu::Extent3d {
-                width: config.width,
-                height: config.height,
-                depth_or_array_layers: 1,
-            },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Depth32Float,
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-            label: Some("Depth Texture"),
-            view_formats: &[],
-    });
- 
-        let depth_view = depth_texture.create_view(&Default::default());
 
-        depth_view
-
-    }
 }
+
+

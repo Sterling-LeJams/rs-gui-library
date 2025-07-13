@@ -39,26 +39,22 @@ impl Vertex {
 }
 
 pub const VERTICES: &[Vertex] = &[
-    Vertex { position: [0.0, 0.5, 0.0], color: [1.0, 0.0, 0.0] },
-    Vertex { position: [-0.5, -0.5, 0.0], color: [0.0, 1.0, 0.0] },
-    Vertex { position: [0.5, -0.5, 0.0], color: [0.0, 0.0, 1.0] },
+    //Front face (z = 0.5)
+    Vertex { position: [-0.5, -0.5,  0.5], color: [1.0, 0.0, 1.0] }, // 4
+    Vertex { position: [ 0.5, -0.5,  0.5], color: [0.0, 1.0, 1.0] }, // 5
+    Vertex { position: [ 0.5,  0.5,  0.5], color: [1.0, 1.0, 1.0] }, // 6
+    Vertex { position: [-0.5,  0.5,  0.5], color: [0.0, 0.0, 0.0] }, // 7
 ];
 
 // to draw triangles on each square face
 pub const INDICES: &[u16] = &[
+    
     // Front face
-    0, 1, 2,  2, 3, 0,
-    // Back face
-    4, 6, 5,  6, 4, 7,
-    // Left face
-    4, 0, 3,  3, 7, 4,
-    // Right face
-    1, 5, 6,  6, 2, 1,
-    // Top face
-    3, 2, 6,  6, 7, 3,
-    // Bottom face
-    4, 5, 1,  1, 0, 4,
+    0, 1, 2,
+    2, 3, 0,
 ];
+
+// should probably have some sort of erro handeling ot match the vertices with the indices
 
 pub struct VertexShaders {
     pub vertex_buffer: wgpu::Buffer,
@@ -112,14 +108,13 @@ impl VertexShaders {
                 polygon_mode: wgpu::PolygonMode::Fill,
                 unclipped_depth: false,
                 conservative: false,
-            },
-            depth_stencil: Some(wgpu::DepthStencilState {
+            }, depth_stencil: Some(wgpu::DepthStencilState {
                 format: wgpu::TextureFormat::Depth32Float,
                 depth_write_enabled: true,
                 depth_compare: wgpu::CompareFunction::Less,
                 stencil: wgpu::StencilState::default(),
                 bias: wgpu::DepthBiasState::default(),
-            }),
+             }),
             multisample: wgpu::MultisampleState {
                 count: 1, 
                 mask: !0, 
@@ -146,6 +141,8 @@ impl VertexShaders {
         );
 
         let num_vertices = VERTICES.len() as u32;
+        print!( "Number of vertices: {}\n", num_vertices);
+
         let num_indices = INDICES.len() as u32;
         Ok(Self {
             vertex_buffer,

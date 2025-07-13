@@ -5,12 +5,14 @@ use crate::shaders::geometry::VertexShaders;
 use crate::gpu::gpu::GPUDevice;
 use wgpu::SurfaceConfiguration;
 use wgpu::RenderPassDepthStencilAttachment;
+use std::time;
+use crate::textures::textures::*;
+use wgpu::TextureView;
+
 
 use winit::{
-    application::ApplicationHandler,
-    event::*,
-    event_loop::{ActiveEventLoop, EventLoop},
-    keyboard::{KeyCode, PhysicalKey},
+    event_loop::ActiveEventLoop,
+    keyboard::KeyCode,
     window::Window,
 };
 
@@ -21,6 +23,9 @@ pub struct WindowState {
     pub window: Arc<Window>,
     gpu: GPUDevice,
     vertex_shaders: VertexShaders,
+
+    //i do not like this but this is just a testing
+    stencil_depth: Arc<TextureView>,
 
 }
 
@@ -40,6 +45,7 @@ impl WindowState {
         let config = configure_surface(&gpu.adapter, &window, &surface);
 
         let vertex_shaders = VertexShaders::new(&gpu.device, config.clone())?;
+        let stencil_depth = TextureType::StencilDepth(StencilDepthTexture::new(&config, &gpu.device)).info().view();
 
         Ok(Self {
             surface,
@@ -48,12 +54,17 @@ impl WindowState {
             window,
             gpu,
             vertex_shaders,
+            stencil_depth,
         })
     }
 
     pub fn render(&self) -> Result<(), wgpu::SurfaceError> {
+        // remember this is a continous loop so everything in here is being looped
         self.window.request_redraw();
+        println!("Rendering frame - Window ID: {:?} Time: {:?}", self.window.id(), time::SystemTime::now());
   
+        // Remember render() is called every time the window is redrawn, so we need to check if the surface is configured before proceeding. so if 
+        // it cant draw a frame it will just exit with an Ok(()) instead of throwing an error.
         if !self.is_surface_configured {
             return Ok(());
         }
@@ -61,7 +72,6 @@ impl WindowState {
         let output = self.surface.get_current_texture()?;
         
         let view = output.texture.create_view(&wgpu::TextureViewDescriptor::default());
-
         
         // We also need to create a CommandEncoder to create the actual commands to send to the GPU. Most modern graphics frameworks expect commands to be stored in a command buffer before being sent to the GPU. 
         // The encoder builds a command buffer that we can then send to the GPU.
@@ -87,8 +97,12 @@ impl WindowState {
                     },
                 })],
                 depth_stencil_attachment: Some(RenderPassDepthStencilAttachment {
-                    view: &self.gpu.create_depth_stencil_texture_and_view(&self.config),
-                    depth_ops: Some(Operations::default()),
+                    view: &self.stencil_depth,
+                    //messing with this after adding a depth stencil attachment finally go something to render
+                    depth_ops:Some(wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(1.0),
+                        store: wgpu::StoreOp::Discard,
+                        }),
                     stencil_ops: None,
                 }),
                 occlusion_query_set: None,
@@ -98,7 +112,8 @@ impl WindowState {
             render_pass.set_pipeline(&self.vertex_shaders.render_pipeline); // 2.
             render_pass.set_vertex_buffer(0, self.vertex_shaders.vertex_buffer.slice(..));
             render_pass.set_index_buffer(self.vertex_shaders.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
-            render_pass.draw(0..self.vertex_shaders.num_vertices, 0..10); // 3.
+            //render_pass.draw(0..self.vertex_shaders.num_vertices, 0..1); 
+            render_pass.draw_indexed(0..self.vertex_shaders.num_indices, 0,0..1);
 
         drop(render_pass);
 
@@ -111,7 +126,7 @@ impl WindowState {
 
     pub fn resize(&mut self, width: u32, height: u32) {
         // If we want to support resizing in our application, we're going to need to reconfigure 
-        // the surface every time the window's size changes. 
+        // the surface every timR the window's size changes. 
         if width > 0 && height > 0 {
             self.config.width = width;
             self.config.height = height;
