@@ -1,5 +1,6 @@
 use anyhow::Result;
-use wgpu::util::DeviceExt;
+use wgpu::{util::{BufferInitDescriptor, DeviceExt}, BindGroupLayout};
+use nalgebra::geometry;
 
 // this is a vertex buffer so the shader is not hard coded and will not have to recompile everytime you want to change it.
 
@@ -44,7 +45,13 @@ pub const VERTICES: &[Vertex] = &[
     Vertex { position: [ 0.5, -0.5,  0.5], color: [0.0, 1.0, 1.0] }, // 5
     Vertex { position: [ 0.5,  0.5,  0.5], color: [1.0, 1.0, 1.0] }, // 6
     Vertex { position: [-0.5,  0.5,  0.5], color: [0.0, 0.0, 0.0] }, // 7
-];
+
+        // Back face (z = -0.5)
+    Vertex { position: [-1.5, -1.5, -0.5], color: [1.0, 0.0, 0.0] }, // 4
+    Vertex { position: [ 1.5, -1.5, -0.5], color: [0.0, 1.0, 0.0] }, // 5
+    Vertex { position: [ 1.5,  1.5, -0.5], color: [0.0, 0.0, 1.0] }, // 6
+    Vertex { position: [-1.5,  1.5, -0.5], color: [1.0, 1.0, 0.0] }, // 7
+    ];
 
 // to draw triangles on each square face
 pub const INDICES: &[u16] = &[
@@ -52,9 +59,30 @@ pub const INDICES: &[u16] = &[
     // Front face
     0, 1, 2,
     2, 3, 0,
+
+    //Back Face
+    5, 4, 7,
+    7, 6, 5, 
 ];
 
 // should probably have some sort of erro handeling ot match the vertices with the indices
+
+// need to have a const to have a projection matrices to convert the model/local space into clip space
+// supposed to be a library here
+//pub const PROJECTION_MATR: 
+
+pub struct CameraMatrix {
+    pub proj_mat: geometry::Perspective3<f32>
+
+}
+
+pub const CAMERA_MAT:CameraMatrix = CameraMatrix { proj_mat: geometry::Perspective3::new(
+    aspect: 16.0/9.0,
+    fovy: std::f32::consts::FRAC_PI_3,
+    znear 0.2,
+    zfar 100.0,  
+    )
+}; 
 
 pub struct VertexShaders {
     pub vertex_buffer: wgpu::Buffer,
@@ -62,6 +90,7 @@ pub struct VertexShaders {
     pub num_vertices: u32,
     pub num_indices: u32,
     pub render_pipeline: wgpu::RenderPipeline,
+    pub bind_buffer_group: wgpu::BindGroup,
     
 }
 
@@ -73,15 +102,33 @@ impl VertexShaders {
             source: wgpu::ShaderSource::Wgsl(include_str!("../shaders/shader.wgsl").into()),
         });
 
+        let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("bind_group"),
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::VERTEX,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None, 
+                }
+            ],
+        });
+
         let render_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("Render Pipeline Layout"),
-            bind_group_layouts: &[],
+            // this is an array of the @group(0) attribute and then in that group is the @binding() 
+            bind_group_layouts: &[&bind_group_layout],
             push_constant_ranges: &[],
         });
 
         let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("Render Pipeline"),
             layout: Some(&render_pipeline_layout),
+            // THIS IS WHERE THE PROCESSING OF THE SHADERS IS DONE
             vertex: wgpu::VertexState {
                 module: &shader,
                 entry_point: Some("vs_main"), 
@@ -104,7 +151,7 @@ impl VertexShaders {
                 topology: wgpu::PrimitiveTopology::TriangleList,
                 strip_index_format: None,
                 front_face: wgpu::FrontFace::Ccw,
-                cull_mode: Some(wgpu::Face::Back), // This will hide back faces
+                cull_mode: None,//Some(wgpu::Face::Back), // This will hide back faces
                 polygon_mode: wgpu::PolygonMode::Fill,
                 unclipped_depth: false,
                 conservative: false,
@@ -140,6 +187,14 @@ impl VertexShaders {
             }
         );
 
+        let bind_buffer_group = device.create_buffer_init(
+            &wgpu::util:BufferInitDescriptor {
+            label: Some("Binding Buffer"),
+            contents ,
+            usage: wgpu::BufferUsages::UNIFORM,
+        })
+        //NEED TO CREATE THE ACTUAL CAMERA MATRIX AND THEN CONTENTS IS THE NUMBER OF BYTES
+
         let num_vertices = VERTICES.len() as u32;
         print!( "Number of vertices: {}\n", num_vertices);
 
@@ -150,6 +205,7 @@ impl VertexShaders {
             num_vertices,
             num_indices,
             render_pipeline,
+            bind_buffer_group
         })
     }
 }

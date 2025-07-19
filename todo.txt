@@ -1,1 +1,3 @@
-I neeed to move the render function to Window and then have then encoder in the vertex shader struct. 
+
+I have been messing with the depth_stencil and other textures to try to change the output and have had limited success.
+I want to no try making a cube by adding vertices

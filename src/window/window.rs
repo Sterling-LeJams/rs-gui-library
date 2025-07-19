@@ -98,10 +98,11 @@ impl WindowState {
                 })],
                 depth_stencil_attachment: Some(RenderPassDepthStencilAttachment {
                     view: &self.stencil_depth,
-                    //messing with this after adding a depth stencil attachment finally go something to render
                     depth_ops:Some(wgpu::Operations {
+                        // so if LoadOp::Load is set then the vertex and indices do not get drawn to the screen
+                        // telling the gpu “Preserve whatever was alreLinein this texture from the last frame — do not clear it, and do not initialize it.”
                         load: wgpu::LoadOp::Clear(1.0),
-                        store: wgpu::StoreOp::Discard,
+                        store: wgpu::StoreOp::Store,
                         }),
                     stencil_ops: None,
                 }),
@@ -112,6 +113,7 @@ impl WindowState {
             render_pass.set_pipeline(&self.vertex_shaders.render_pipeline); // 2.
             render_pass.set_vertex_buffer(0, self.vertex_shaders.vertex_buffer.slice(..));
             render_pass.set_index_buffer(self.vertex_shaders.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
+            render_pass.set_bind_group(0, Some(&self.vertex_shaders.bind_group_layout), &[]);
             //render_pass.draw(0..self.vertex_shaders.num_vertices, 0..1); 
             render_pass.draw_indexed(0..self.vertex_shaders.num_indices, 0,0..1);
 
