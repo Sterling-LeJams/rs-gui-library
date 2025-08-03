@@ -87,6 +87,7 @@ impl WindowState {
                     view: &view,
                     resolve_target: None,
                     ops: wgpu::Operations {
+                        // THIS IS JUST FOR THE BACKGROUND COLOR
                         load: wgpu::LoadOp::Clear(wgpu::Color {
                             r: 0.1,
                             g: 0.2,
@@ -96,26 +97,34 @@ impl WindowState {
                         store: wgpu::StoreOp::Store,
                     },
                 })],
-                depth_stencil_attachment: Some(RenderPassDepthStencilAttachment {
-                    view: &self.stencil_depth,
-                    depth_ops:Some(wgpu::Operations {
-                        // so if LoadOp::Load is set then the vertex and indices do not get drawn to the screen
-                        // telling the gpu “Preserve whatever was alreLinein this texture from the last frame — do not clear it, and do not initialize it.”
-                        load: wgpu::LoadOp::Clear(1.0),
-                        store: wgpu::StoreOp::Store,
-                        }),
-                    stencil_ops: None,
-                }),
+                depth_stencil_attachment: None,
+                
+                // Some(RenderPassDepthStencilAttachment {
+                //     view: &self.stencil_depth,
+                //     depth_ops:Some(wgpu::Operations {
+                //         // so if LoadOp::Load is set then the vertex and indices do not get drawn to the screen
+                //         // telling the gpu “Preserve whatever was alreLinein this texture from the last frame — do not clear it, and do not initialize it.”
+                //         load: wgpu::LoadOp::Clear(1.0),
+                //         store: wgpu::StoreOp::Store,
+                //         }),
+                //     stencil_ops: None,
+                // }),
                 occlusion_query_set: None,
                 timestamp_writes: None,
             });
 
             render_pass.set_pipeline(&self.vertex_shaders.render_pipeline); // 2.
-            render_pass.set_vertex_buffer(0, self.vertex_shaders.vertex_buffer.slice(..));
-            render_pass.set_index_buffer(self.vertex_shaders.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
-            render_pass.set_bind_group(0, Some(&self.vertex_shaders.bind_group_layout), &[]);
+            render_pass.set_bind_group(0, Some(&self.vertex_shaders.cam_bind_group), &[]);
+
+            render_pass.set_vertex_buffer(0, self.vertex_shaders.c1_vertex_buffer.slice(..));
+            render_pass.draw(0..self.vertex_shaders.num_vertices, 0..1);
+
+            render_pass.set_vertex_buffer(1, self.vertex_shaders.c2_vertex_buffer.slice(..));
+            render_pass.draw(0..self.vertex_shaders.num_vertices, 0..1);
+
+            //render_pass.set_index_buffer(self.vertex_shaders.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
             //render_pass.draw(0..self.vertex_shaders.num_vertices, 0..1); 
-            render_pass.draw_indexed(0..self.vertex_shaders.num_indices, 0,0..1);
+            //render_pass.draw_indexed(0..self.vertex_shaders.num_indices, 0,0..1);
 
         drop(render_pass);
 

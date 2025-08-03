@@ -1,3 +1,5 @@
 
-I have been messing with the depth_stencil and other textures to try to change the output and have had limited success.
-I want to no try making a cube by adding vertices
+
+have to correct the CameraUniform which wraps the CameraMatrix struct so that I can impl the 
+Pod to get bytes to create a buffer.
+
