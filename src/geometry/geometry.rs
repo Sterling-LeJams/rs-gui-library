@@ -1,5 +1,5 @@
 
-use nalgebra::Translation3;
+use nalgebra::{Point3, Translation3};
 
 
 // this is a vertex buffer so the shader is not hard coded and will not have to recompile everytime you want to change it.
@@ -57,7 +57,9 @@ impl Cube {
     }
 
     pub fn to_world_space(&self) -> Self {
-        let translation = Translation3::new(-0.5, 0.8, 0.0);
+        // I THINK I WANT TO PASS IN THE TRANSLATION BUILD THE MATRIX 
+        let v2: nalgebra::OPoint<f32, nalgebra::Const<3>> = Point3::new(-0.5, 0.8, 0.0);
+        let translation = Translation3::new(v2.x, v2.y, v2.z);
 
         // Convert to a 4x4 matrix
         let translated_vertices = self.vertices.map(|each_vertices| {

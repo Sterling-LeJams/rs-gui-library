@@ -124,7 +124,7 @@ impl VertexShaders {
             }],
         });
 
-        let mut cube_1 = Cube::new();
+        let cube_1 = Cube::new();
         let cube_2 = cube_1.to_world_space();
 
         let mut vertex_bytes:Vec<u8> = bytemuck::cast_slice(&cube_1.vertices).to_vec();
