@@ -1,15 +1,10 @@
 use std::{sync::Arc};
 use anyhow::Result;
-use wgpu::Operations;
-use crate::render;
-use crate::shaders::geometry::VertexShaders;
 use crate::gpu::gpu::GPUDevice;
 use wgpu::SurfaceConfiguration;
-use wgpu::RenderPassDepthStencilAttachment;
-use std::time;
 use crate::textures::textures::*;
 use wgpu::TextureView;
-
+use crate::shaders::shader::VertexShaders;
 use winit::{
     event_loop::ActiveEventLoop,
     keyboard::KeyCode,
