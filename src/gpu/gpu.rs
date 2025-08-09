@@ -22,7 +22,7 @@ impl GPUDevice {
                 force_fallback_adapter: false,
             })
             .await?;
-
+        
         // Open connection to a graphics and/or compute device.
         // Responsible for the creation of most rendering and compute resources.
         // These are then used in commands, which are submitted to a [`Queue`].

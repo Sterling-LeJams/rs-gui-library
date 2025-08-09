@@ -5,8 +5,9 @@
 // holds the acutal data like the camera matrix.
 
 // Camera struct in rust is inited and then the buffer is made then passed into bind_group is like Vertex::desc() where it tells the gpu how to interpret the camera buffer
-// the shader then reads from the buffer
+// the shader then reads from the buffer. This needs to be the exact same order as the Rust struct that is being sent
 struct Camera {
+    cam_mat: mat4x4<f32>,
     clip_space: mat4x4<f32>,
     
 };
@@ -43,12 +44,15 @@ struct FragOutput {
 
 @vertex
 fn vs_main(model: VertexInput) -> VertexOutput {
+    //From Rust the Cube(rectangle) is coming in as world space coordinates. Then Camera is coming in as clip space.
     var out: VertexOutput;
-    var proj: ProjectionMatr;
 
-    out.c1_clip_position = vec4<f32>(model.c1_position, 1.0); 
-    
+    var model_world_space = vec4<f32>(model.c1_position, 1.0); 
 
+    // THE ORDER YOU MULTIPLY THIS MATTERS 
+    out.c1_clip_position = camera.clip_space * model_world_space;   
+
+//    out.c1_clip_position = model_world_space;
     out.c1_color = model.c1_color;
     
     return out;

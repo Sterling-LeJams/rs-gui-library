@@ -2,10 +2,10 @@ use anyhow::Result;
 use nalgebra::Translation3;
 use nalgebra::base::Matrix4;
 use nalgebra::geometry;
-use std::{num::NonZeroU64, sync::LazyLock};
+use std::{num::NonZeroU64};
 use wgpu::{
-    BindGroupDescriptor, BindGroupEntry, BindGroupLayout,
-    util::{BufferInitDescriptor, DeviceExt},
+    BindGroupDescriptor, BindGroupEntry,
+    util::{DeviceExt},
 };
 
 // this is a vertex buffer so the shader is not hard coded and will not have to recompile everytime you want to change it.
@@ -56,67 +56,52 @@ impl Cube {
     pub fn new() -> Self {
         Self {
             vertices: [
-                Vertex {
-                    position: [-0.5, -0.5, 0.5],
-                    color: [1.0, 0.0, 1.0],
-                }, // 4
-                Vertex {
-                    position: [0.5, -0.5, 0.5],
-                    color: [0.0, 1.0, 1.0],
-                }, // 5
-                Vertex {
-                    position: [0.5, 0.5, 0.5],
-                    color: [1.0, 1.0, 1.0],
-                }, // 6
-                Vertex {
-                    position: [-0.5, 0.5, 0.5],
-                    color: [0.0, 0.0, 0.0],
-                },
+                Vertex { position: [-0.5, -0.5, 0.0], color: [1.0, 0.0, 1.0] }, 
+                Vertex { position: [0.5, -0.5, 0.0], color: [0.0, 1.0, 1.0] }, 
+                Vertex { position: [0.5, 0.5, 0.0], color: [1.0, 1.0, 1.0] }, 
+                Vertex { position: [-0.5, 0.5, 0.0], color: [0.0, 0.0, 0.0] },
             ],
         }
     }
 
-    pub fn to_world_space(&mut self) -> Self {
-        let translation = Translation3::new(0.25, 0.5, 0.0);
+    pub fn to_world_space(&self) -> Self {
+        let translation = Translation3::new(-0.5, 0.8, 0.0);
 
         // Convert to a 4x4 matrix
-        for each_vertices in &mut self.vertices {
-            let homogeonous_vert = nalgebra::Vector4::new(
-                each_vertices.position[0],
-                each_vertices.position[1],
-                each_vertices.position[2],
-                1.0,
-            );
+        let translated_vertices = self.vertices.map(|each_vertices| {
+            let homogeonous_vert = nalgebra::Vector4::new(each_vertices.position[0],each_vertices.position[1],each_vertices.position[2],1.0,);
             let world_space = translation.to_homogeneous() * homogeonous_vert;
             let world_space_mat = world_space.xyz(); //drop w component 
 
-            each_vertices.position = world_space_mat.into()
-        }
+            Vertex {
+                position: world_space_mat.into(), 
+                color: each_vertices.color
+            }
+        });
 
         Self {
-            vertices: self.vertices,
+            vertices: translated_vertices,
         }
     }
 }
 
 // to draw triangles on each square face
-pub const INDICES: &[u16] = &[
-    // Front face
-    0, 1, 2, 2, 3, 0, //Back Face
-    5, 4, 7, 7, 6, 5,
+pub const INDICES: [u16; 12] = [
+       // Rectangle 1
+    0, 1, 2,
+    2, 3, 0,
+    // Rectangle 2 (offset by 4)
+    4, 5, 6,
+    6, 7, 4,
 ];
 
 // should probably have some sort of erro handeling ot match the vertices with the indices
-
-// need to have a const to have a projection matrices to convert the model/local space into clip space
-// supposed to be a library here
-//pub const PROJECTION_MATR:
 
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct CameraUniform {
     pub cam_mat: [[f32; 4]; 4],
-    pub view_proj: [[f32; 4]; 4], // mat4x4<f32>
+    pub clip_space: [[f32; 4]; 4], // mat4x4<f32>
 }
 // CURRENTLY THIS ONLY TAKING ONE MATRIX AND I AM PASSING IN CameraMatrix::new().to_clip_space(); but I do not know that I should be passing this in.
 // WHAT IF I WANT THE JUST CAMERA POSITION AS A BUFFER
@@ -132,9 +117,8 @@ impl From<CameraMatrix> for CameraUniform {
             .try_into()
             .unwrap();
 
-        let view_proj: [[f32; 4]; 4] = cam
+        let clip_space: [[f32; 4]; 4] = cam
             .clip_space
-            .unwrap()
             .as_slice()
             .chunks(4)
             .map(|chunk| <[f32; 4]>::try_from(chunk).unwrap())
@@ -142,63 +126,45 @@ impl From<CameraMatrix> for CameraUniform {
             .try_into()
             .unwrap();
 
-        CameraUniform { cam_mat, view_proj }
+        CameraUniform { cam_mat, clip_space }
     }
 }
 
-// impl From<&Matrix4<f32>> for CameraUniform {
-//     fn from(cam: &Matrix4<f32>) -> Self {
-
-//         let view_proj: [[f32; 4]; 4] = cam.as_slice().chunks(4).map(|chunk| <[f32; 4]>::try_from(chunk).unwrap())
-//             .collect::<Vec<_>>()
-//             .try_into()
-//             .unwrap();
-
-//         CameraUniform {
-//             view_proj
-//         }
-//     }
-// }
-
 #[repr(C)]
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub struct CameraMatrix {
     pub cam_matrix: Matrix4<f32>,
-    pub clip_space: Option<Matrix4<f32>>,
+    pub clip_space: Matrix4<f32>,
 }
 
 impl CameraMatrix {
-    pub fn new() -> Self {
+    pub fn new(aspect_ratio: f32) -> Self {
         // view matrix (camera)
         let eye: nalgebra::OPoint<f32, nalgebra::Const<3>> = nalgebra::Point3::new(0.0, 0.0, 5.0); // Camera is 5 units back
         let target = nalgebra::Point3::new(0.0, 0.0, 0.0); // Looking at origin
         let up = nalgebra::Vector3::y(); // Up is +Y
-        let cam_matrix = Matrix4::face_towards(&eye, &target, &up);
-
+        let cam_matrix = Matrix4::look_at_rh(&eye, &target, &up);
+        
+        // Create projection matrix
+        let projection = geometry::Perspective3::new(
+            aspect_ratio, 
+            std::f32::consts::FRAC_PI_4, 
+            0.1, 
+            100.0
+        ).to_homogeneous();
+        
+        // Combine them: projection * view
+        let view_proj = projection * cam_matrix;
         Self {
             cam_matrix,
-            clip_space: None,
+            clip_space: view_proj,
         }
     }
 
-    pub fn to_clip_space(&mut self) -> Self {
-        // projection matrix
-        let perspective =
-            geometry::Perspective3::new(16.0 / 9.0, std::f32::consts::FRAC_PI_3, 0.2, 100.0)
-                .to_homogeneous();
-
-        let clip_space = perspective * self.cam_matrix;
-
-        Self {
-            cam_matrix: self.cam_matrix,
-            clip_space: Some(clip_space),
-        }
-    }
 }
 
 pub struct VertexShaders {
-    pub c1_vertex_buffer: wgpu::Buffer,
-    pub c2_vertex_buffer: wgpu::Buffer,
+    pub vertex_buffer: wgpu::Buffer,
     pub index_buffer: wgpu::Buffer,
     pub num_vertices: u32,
     pub num_indices: u32,
@@ -286,19 +252,12 @@ impl VertexShaders {
             cache: None,
         });
 
-        let mut cube_vertices = Cube::new();
-        println!(
-            "befow Translation to World Space{:?}",
-            cube_vertices.vertices
-        );
-        let x = cube_vertices.to_world_space();
-        println!("After Translation to World Space{:?}", x.vertices);
-
-        // this will be without the transformation to see if the transformation is even doing anything
-        let cube_2 = Cube::new().to_world_space();
-
         //Camera Buffer
-        let cam = CameraMatrix::new().to_clip_space();
+
+        let asp_ratio = config.width / config.height;
+        let cam = CameraMatrix::new(asp_ratio as f32);
+        println!("Camera Matrix: {:?}", cam.cam_matrix);
+        println!("Camera Matrix to Clip Space: {:?}", cam.clip_space);
 
         let camera_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Camera Uniform Buffer"),
@@ -306,7 +265,7 @@ impl VertexShaders {
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         });
 
-        //Bind group for camera and
+        //Bind group for Camera
         let cam_bind_group = device.create_bind_group(&BindGroupDescriptor {
             label: Some("Cam Bind Group"),
             layout: &bind_group_layout,
@@ -316,36 +275,40 @@ impl VertexShaders {
                     buffer: &camera_buffer,
                     offset: 0,
                     // this is not the size of th ebuffer but how much of the buffer you are binding to the shader.
-                    size: Some(NonZeroU64::new(32).expect("buffer size must be non-zero")),
+                    size: Some(NonZeroU64::new(128).expect("buffer size must be non-zero")),
                 }),
             }],
         });
 
-        let c1_vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Vertex Buffer"),
-            contents: bytemuck::cast_slice(&cube_vertices.vertices),
-            usage: wgpu::BufferUsages::VERTEX,
-        });
+        let mut cube_1 = Cube::new();
+        let cube_2 = cube_1.to_world_space();
+        println!("Cube 1: {:?}", cube_1.vertices);
+        println!("Cube 2: {:?}", cube_2.vertices);
 
-        let c2_vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+
+        let mut vertex_bytes = bytemuck::cast_slice(&cube_1.vertices).to_vec();
+        vertex_bytes.extend_from_slice(bytemuck::cast_slice(&cube_2.vertices));
+
+        let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Vertex Buffer"),
-            contents: bytemuck::cast_slice(&cube_2.vertices),
+            contents: &vertex_bytes,
             usage: wgpu::BufferUsages::VERTEX,
+            
         });
 
         let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Cube Index Buffer"),
-            contents: bytemuck::cast_slice(INDICES),
+            contents: bytemuck::cast_slice(&INDICES),
             usage: wgpu::BufferUsages::INDEX,
         });
 
-        let num_vertices = cube_vertices.vertices.len() as u32;
+        let num_vertices = (cube_1.vertices.len()+ cube_2.vertices.len()) as u32;
         print!("Number of vertices: {}\n", num_vertices);
 
         let num_indices = INDICES.len() as u32;
+
         Ok(Self {
-            c1_vertex_buffer,
-            c2_vertex_buffer,
+            vertex_buffer,
             index_buffer,
             num_vertices,
             num_indices,

@@ -1,6 +1,7 @@
 use std::{sync::Arc};
 use anyhow::Result;
 use wgpu::Operations;
+use crate::render;
 use crate::shaders::geometry::VertexShaders;
 use crate::gpu::gpu::GPUDevice;
 use wgpu::SurfaceConfiguration;
@@ -8,7 +9,6 @@ use wgpu::RenderPassDepthStencilAttachment;
 use std::time;
 use crate::textures::textures::*;
 use wgpu::TextureView;
-
 
 use winit::{
     event_loop::ActiveEventLoop,
@@ -61,7 +61,6 @@ impl WindowState {
     pub fn render(&self) -> Result<(), wgpu::SurfaceError> {
         // remember this is a continous loop so everything in here is being looped
         self.window.request_redraw();
-        println!("Rendering frame - Window ID: {:?} Time: {:?}", self.window.id(), time::SystemTime::now());
   
         // Remember render() is called every time the window is redrawn, so we need to check if the surface is configured before proceeding. so if 
         // it cant draw a frame it will just exit with an Ok(()) instead of throwing an error.
@@ -116,15 +115,11 @@ impl WindowState {
             render_pass.set_pipeline(&self.vertex_shaders.render_pipeline); // 2.
             render_pass.set_bind_group(0, Some(&self.vertex_shaders.cam_bind_group), &[]);
 
-            render_pass.set_vertex_buffer(0, self.vertex_shaders.c1_vertex_buffer.slice(..));
-            render_pass.draw(0..self.vertex_shaders.num_vertices, 0..1);
+            render_pass.set_vertex_buffer(0, self.vertex_shaders.vertex_buffer.slice(..));
+            render_pass.set_index_buffer(self.vertex_shaders.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
 
-            render_pass.set_vertex_buffer(1, self.vertex_shaders.c2_vertex_buffer.slice(..));
-            render_pass.draw(0..self.vertex_shaders.num_vertices, 0..1);
-
-            //render_pass.set_index_buffer(self.vertex_shaders.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
+            render_pass.draw_indexed(0..12, 0, 0..1);
             //render_pass.draw(0..self.vertex_shaders.num_vertices, 0..1); 
-            //render_pass.draw_indexed(0..self.vertex_shaders.num_indices, 0,0..1);
 
         drop(render_pass);
 

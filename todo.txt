@@ -1,5 +1,0 @@
-
-
-have to correct the CameraUniform which wraps the CameraMatrix struct so that I can impl the 
-Pod to get bytes to create a buffer.
-
