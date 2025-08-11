@@ -1,5 +1,5 @@
 
-use nalgebra::{Point3, Translation3};
+use nalgebra::{Matrix4, Point3, Translation, Translation3};
 
 
 // this is a vertex buffer so the shader is not hard coded and will not have to recompile everytime you want to change it.
@@ -23,11 +23,13 @@ impl Vertex {
             array_stride: std::mem::size_of::<Vertex>() as wgpu::BufferAddress,
             step_mode: wgpu::VertexStepMode::Vertex,
             attributes: &[
+                // VERTICES
                 wgpu::VertexAttribute {
                     offset: 0,
                     shader_location: 0, // this maps to the @location(0) in WGSL
                     format: wgpu::VertexFormat::Float32x3,
                 },
+                // COLOR
                 wgpu::VertexAttribute {
                     offset: std::mem::size_of::<[f32; 3]>() as wgpu::BufferAddress,
                     shader_location: 1,
@@ -38,11 +40,11 @@ impl Vertex {
     }
 }
 
-
 #[repr(C)]
 #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable, Debug)]
 pub struct Cube {
     pub vertices: [Vertex; 4],
+
 }
 impl Cube {
     pub fn new() -> Self {
@@ -56,26 +58,12 @@ impl Cube {
         }
     }
 
-    pub fn to_world_space(&self) -> Self {
-        // I THINK I WANT TO PASS IN THE TRANSLATION BUILD THE MATRIX 
-        let v2: nalgebra::OPoint<f32, nalgebra::Const<3>> = Point3::new(-0.5, 0.8, 0.0);
-        let translation = Translation3::new(v2.x, v2.y, v2.z);
+    pub fn move_cube(&self, translation: Point3<f32>) -> [[f32; 4]; 4] {
+        let translation = Translation3::new(translation.x, translation.y, translation.z).to_homogeneous();
+        let pod_friendly_mat: [[f32; 4]; 4] = translation.into();
 
-        // Convert to a 4x4 matrix
-        let translated_vertices = self.vertices.map(|each_vertices| {
-            let homogeonous_vert = nalgebra::Vector4::new(each_vertices.position[0],each_vertices.position[1],each_vertices.position[2],1.0,);
-            let world_space = translation.to_homogeneous() * homogeonous_vert;
-            let world_space_mat = world_space.xyz(); //drop w component 
+        pod_friendly_mat
 
-            Vertex {
-                position: world_space_mat.into(), 
-                color: each_vertices.color
-            }
-        });
-
-        Self {
-            vertices: translated_vertices,
-        }
     }
 }
 

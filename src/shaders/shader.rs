@@ -8,6 +8,7 @@ use crate::geometry::geometry::{Vertex, Cube, INDICES};
 use crate::camera::camera::CameraMatrix;
 use crate::camera::camera::CameraUniform;
 use crate::shaders::buffers::BufferTypes;
+use nalgebra::Point3;
 
 pub struct VertexShaders {
     pub vertex_buffer: wgpu::Buffer,
@@ -15,7 +16,7 @@ pub struct VertexShaders {
     pub num_vertices: u32,
     pub num_indices: u32,
     pub render_pipeline: wgpu::RenderPipeline,
-    pub cam_bind_group: wgpu::BindGroup,
+    pub bind_group: wgpu::BindGroup,
 }
 
 impl VertexShaders {
@@ -28,6 +29,7 @@ impl VertexShaders {
 
         let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("bind_group"),
+            // CAMERA
             entries: &[wgpu::BindGroupLayoutEntry {
                 binding: 0,
                 visibility: wgpu::ShaderStages::VERTEX,
@@ -37,7 +39,19 @@ impl VertexShaders {
                     min_binding_size: None,
                 },
                 count: None,
-            }],
+            },
+            // CUBE TRANSLATION 
+           wgpu::BindGroupLayoutEntry {
+                binding: 1,
+                visibility: wgpu::ShaderStages::VERTEX,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            }, 
+            ],
         });
 
         let render_pipeline_layout =
@@ -98,43 +112,65 @@ impl VertexShaders {
             cache: None,
         });
 
-        //Camera Buffer
+        let cube_1 = Cube::new();
+        let cube_tran = cube_1.move_cube(Point3::new(-0.5, 0.8, 0.0));
+        //let cube_2 = cube_1.to_world_space();
 
+        //Camera Buffer
         let asp_ratio = config.width / config.height;
         let cam = CameraMatrix::new(asp_ratio as f32);
 
-        let camera_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Camera Uniform Buffer"),
-            contents: bytemuck::bytes_of(&CameraUniform::from(cam)),
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-        });
+        // I WANT TO ABSTARCT THIS AWAY INTO THE CAMERA
+        // let camera_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        //     label: Some("Camera Uniform Buffer"),
+        //     contents: bytemuck::bytes_of(&CameraUniform::from(cam)),
+        //     usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        // });
+        let cam_uniform = &CameraUniform::from(cam);
+        let cam_bytes = bytemuck::bytes_of(cam_uniform);
+        let camera_buffer = BufferTypes::UniformBuffer(cam_bytes).build(Some("camera"), &device);
 
-        //Bind group for Camera
-        let cam_bind_group = device.create_bind_group(&BindGroupDescriptor {
+        let translation_mat_bytes = bytemuck::bytes_of(&cube_tran);
+        let translation_buffer = BufferTypes::UniformBuffer(translation_mat_bytes).build(Some("translation buffer"), &device);
+
+        //Bind group for Camera and Translation
+        let bind_group = device.create_bind_group(&BindGroupDescriptor {
             label: Some("Cam Bind Group"),
             layout: &bind_group_layout,
+
+            // CAMERA
             entries: &[BindGroupEntry {
                 binding: 0,
                 resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
                     buffer: &camera_buffer,
                     offset: 0,
                     // this is not the size of th ebuffer but how much of the buffer you are binding to the shader.
-                    size: Some(NonZeroU64::new(128).expect("buffer size must be non-zero")),
+                    // I AM USING None TO USE THE ENTIRE SIZE OF THE BUFFER PER THE DOCS
+                    size: None,
                 }),
-            }],
+            }, 
+            // TRANSLATION
+            BindGroupEntry {
+                binding: 1,
+                resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
+                    buffer: &translation_buffer,
+                    offset: 0,
+                    // this is not the size of th ebuffer but how much of the buffer you are binding to the shader.
+                    size: None,
+                }),
+            }
+        ],
         });
 
-        let cube_1 = Cube::new();
-        let cube_2 = cube_1.to_world_space();
-
-        let mut vertex_bytes:Vec<u8> = bytemuck::cast_slice(&cube_1.vertices).to_vec();
-        vertex_bytes.extend_from_slice(bytemuck::cast_slice(&cube_2.vertices));
+        let vertex_bytes:Vec<u8> = bytemuck::cast_slice(&cube_1.vertices).to_vec();
+        //vertex_bytes.extend_from_slice(bytemuck::cast_slice(&cube_2.vertices));
 
         let vertex_buffer = BufferTypes::VertexBuffer(&vertex_bytes).build(Some("v1"), &device);
 
         let index_buffer = BufferTypes::IndexBuffer(&INDICES).build(Some("indices"), &device);
 
-        let num_vertices = (cube_1.vertices.len()+ cube_2.vertices.len()) as u32;
+        //let num_vertices = (cube_1.vertices.len()+ cube_2.vertices.len()) as u32;
+        let num_vertices = cube_1.vertices.len() as u32;
 
         let num_indices = INDICES.len() as u32;
 
@@ -144,7 +180,7 @@ impl VertexShaders {
             num_vertices,
             num_indices,
             render_pipeline,
-            cam_bind_group,
+            bind_group,
         })
     }
 }

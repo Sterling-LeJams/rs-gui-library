@@ -1,11 +1,4 @@
-// I want a uniform buffer
-// At group 0, binding 0
-// And I will treat it as a mat4x4<f32> in the shader. Then the BindGroupLayout says hey the shader is expecting a uniform
-// buffer at group 0, binding 0. then the create_bind_group() is saying use this buffre at group 0 bind 0. then the buffer
-// holds the acutal data like the camera matrix.
 
-// Camera struct in rust is inited and then the buffer is made then passed into bind_group is like Vertex::desc() where it tells the gpu how to interpret the camera buffer
-// the shader then reads from the buffer. This needs to be the exact same order as the Rust struct that is being sent
 struct Camera {
     cam: mat4x4<f32>,
     projection: mat4x4<f32>,
@@ -15,27 +8,27 @@ struct Camera {
 @group(0) @binding(0)
 var<uniform> camera: Camera;
 
-// VertexInput: Raw data from your vertex buffer (per-vertex). SO I have the VERTICES struct which includes the 
-// vertex points and color and that gets passed in via VertexInput and then the functinos below take and transform that data
-// VertexOutput: Transformed data for rendering 
-
 // @location is mapped out in the geometry::Vertex.desc()
 struct VertexInput {
     @location(0) c1_position: vec3<f32>, // first attribute is position (x, y, z)
     @location(1) c1_color: vec3<f32>, // second attribute is color (r, g, b)
-    // @location(2) c2_position: vec3<f32>,
-    // @location(3) c2_color: vec3<f32>, 
 };
+
+struct ModelTranslation {
+    model: mat4x4<f32>,
+};
+
+@group(0) @binding(1)
+var<uniform> model_translation: ModelTranslation;
 
 struct VertexOutput {
     @builtin(position) c1_clip_position: vec4<f32>, // a special value the GPU needs — the final screen position
     @location(0) c1_color: vec3<f32>, 
-    //@location(1) c2_color: vec3<f32>, 
+    
 };
 
 struct FragOutput {
     @location(0) c1: vec4<f32>,
-    //@location(1) c2: vec4<f32>
 }
 
 // The @builtin(position) bit tells WGPU that this is the value we want to use as the vertex's clip coordinates (opens new window).
@@ -43,18 +36,20 @@ struct FragOutput {
 // We are using @vertex to mark this function as a valid entry point for a vertex shader. 
 
 @vertex
-fn vs_main(model: VertexInput) -> VertexOutput {
-    //From Rust the Cube(rectangle) is coming in as world space coordinates. Then Camera is coming in as clip space.
+fn vs_main(model: VertexInput, @builtin(instance_index) instance: u32) -> VertexOutput {
     var out: VertexOutput;
 
     var model_world_space = vec4<f32>(model.c1_position, 1.0); 
-    var view_space = camera.cam * model_world_space;
 
-    // THE ORDER YOU MULTIPLY THIS MATTERS 
-    out.c1_clip_position = camera.projection * view_space;   
+    // Apply translation to instance 1 *before* view/projection
+    if (instance == 1u) {
+        model_world_space = model_translation.model * model_world_space;
+    }
 
+    let view_space = camera.cam * model_world_space;
+    out.c1_clip_position = camera.projection * view_space;
     out.c1_color = model.c1_color;
-    
+
     return out;
 }
   

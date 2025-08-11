@@ -5,6 +5,7 @@ use bytemuck::{Pod, cast_slice};
 pub enum BufferTypes<'a, T: Pod> {
     VertexBuffer(&'a [T]),
     IndexBuffer(&'a [T]),
+    UniformBuffer(&'a [T]),
 }
 
 impl<'a, T: Pod> BufferTypes<'a, T> {
@@ -22,6 +23,14 @@ impl<'a, T: Pod> BufferTypes<'a, T> {
                     label,
                     contents: cast_slice(contents),
                     usage: wgpu::BufferUsages::INDEX,
+                })
+            }
+
+             BufferTypes::UniformBuffer(contents) => {
+                device.create_buffer_init(&BufferInitDescriptor {
+                    label,
+                    contents: cast_slice(contents),
+                    usage: wgpu::BufferUsages::UNIFORM,
                 })
             }
         }

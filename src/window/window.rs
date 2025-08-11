@@ -108,12 +108,12 @@ impl WindowState {
             });
 
             render_pass.set_pipeline(&self.vertex_shaders.render_pipeline); // 2.
-            render_pass.set_bind_group(0, Some(&self.vertex_shaders.cam_bind_group), &[]);
+            render_pass.set_bind_group(0, Some(&self.vertex_shaders.bind_group), &[]);
 
             render_pass.set_vertex_buffer(0, self.vertex_shaders.vertex_buffer.slice(..));
             render_pass.set_index_buffer(self.vertex_shaders.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
 
-            render_pass.draw_indexed(0..12, 0, 0..1);
+            render_pass.draw_indexed(0..12, 0, 0..2);
             //render_pass.draw(0..self.vertex_shaders.num_vertices, 0..1); 
 
         drop(render_pass);
