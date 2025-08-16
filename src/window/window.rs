@@ -2,14 +2,13 @@ use std::{sync::Arc};
 use anyhow::Result;
 use crate::gpu::gpu::GPUDevice;
 use wgpu::SurfaceConfiguration;
-use crate::textures::textures::*;
-use wgpu::TextureView;
 use crate::shaders::shader::VertexShaders;
 use winit::{
     event_loop::ActiveEventLoop,
     keyboard::KeyCode,
     window::Window,
 };
+use crate::camera::camera::CameraMatrix;
 
 pub struct WindowState {
     surface: wgpu::Surface<'static>,
@@ -18,9 +17,9 @@ pub struct WindowState {
     pub window: Arc<Window>,
     gpu: GPUDevice,
     vertex_shaders: VertexShaders,
+    pub camera: CameraMatrix,
 
-    //i do not like this but this is just a testing
-    stencil_depth: Arc<TextureView>,
+    //stencil_depth: Arc<TextureView>,
 
 }
 
@@ -39,8 +38,12 @@ impl WindowState {
 
         let config = configure_surface(&gpu.adapter, &window, &surface);
 
+        let aspect_ratio= config.width / config.height;
+        let camera = CameraMatrix::new(aspect_ratio as f32);
+
         let vertex_shaders = VertexShaders::new(&gpu.device, config.clone())?;
-        let stencil_depth = TextureType::StencilDepth(StencilDepthTexture::new(&config, &gpu.device)).info().view();
+
+        //let stencil_depth = TextureType::StencilDepth(StencilDepthTexture::new(&config, &gpu.device)).info().view();
 
         Ok(Self {
             surface,
@@ -49,7 +52,8 @@ impl WindowState {
             window,
             gpu,
             vertex_shaders,
-            stencil_depth,
+            camera, 
+            //stencil_depth,
         })
     }
 
@@ -141,6 +145,9 @@ impl WindowState {
     pub fn handle_key(&self, event_loop: &ActiveEventLoop, code: KeyCode, is_pressed: bool) {
     match (code, is_pressed) {
         (KeyCode::Escape, true) => event_loop.exit(),
+        (KeyCode::KeyW, true) => self.camera.handle_key_press(KeyCode::KeyW),
+        
+
         _ => {}
         
         }

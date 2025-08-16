@@ -1,5 +1,4 @@
-use wgpu::{util::{BufferInitDescriptor, DeviceExt}, Device};
-use wgpu::Buffer;
+use wgpu::util::{BufferInitDescriptor, DeviceExt};
 use bytemuck::{Pod, cast_slice};
 
 pub enum BufferTypes<'a, T: Pod> {

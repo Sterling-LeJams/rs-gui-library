@@ -77,6 +77,7 @@ impl ApplicationHandler<WindowState> for App {
                     },
                 ..
             } => state.handle_key(event_loop, code, key_state.is_pressed()),
+
             _ => {}
         }
     }
@@ -92,3 +93,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
 
     Ok(())
 }
+
+// THE run() FUNCTION STARTS THE event_loop and Window. event_loop.run_app() takes any type that impls ApplicationHandler trait.  
+
+    

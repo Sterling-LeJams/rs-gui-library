@@ -1,5 +1,6 @@
 use nalgebra::Matrix4;
 use nalgebra::geometry::Perspective3;
+use winit::keyboard::KeyCode;
 
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
@@ -63,6 +64,15 @@ impl CameraMatrix {
             projection,
         }
     }
+
+    pub fn handle_key_press(&self, key: KeyCode) {
+        // ENTER KEY 
+        match key {
+            KeyCode::KeyW => {  },
+            _=> {}
+        }
+
+
+
+    }
 }
-
-
